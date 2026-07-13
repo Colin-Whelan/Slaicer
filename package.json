@@ -1,0 +1,22 @@
+{
+  "name": "slaicer",
+  "version": "0.8.0",
+  "description": "Reconstruct flattened email PNGs into reusable slices.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "slice": "node cli/index.js",
+    "dev": "node server/node.js",
+    "start": "deno task start"
+  },
+  "//": "Runtime server is Deno (server/deno.ts). sharp/ajv are dev-only (CLI + tests).",
+  "devDependencies": {
+    "ajv": "^8.17.1",
+    "sharp": "^0.33.5",
+    "vitest": "^4.1.9"
+  }
+}

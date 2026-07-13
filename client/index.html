@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Slaicer</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="css/app.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.32.7/ace.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+</head>
+<body>
+  <header class="toolbar">
+    <strong class="brand">
+      <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true">
+        <rect x="10" y="11" width="44" height="10" rx="5" fill="#4f9dff"/>
+        <rect x="10" y="27" width="44" height="10" rx="5" fill="#ffcc55"/>
+        <rect x="10" y="43" width="44" height="10" rx="5" fill="#ff2d95"/>
+      </svg>
+      Slaicer
+    </strong>
+    <label class="btn">
+      New
+      <input id="file" type="file" accept="image/png,image/jpeg" multiple hidden />
+    </label>
+    <label class="btn" title="Replace this tab's image, keeping slice positions">
+      Replace
+      <input id="replace" type="file" accept="image/png,image/jpeg" hidden />
+    </label>
+    <label class="btn" title="Open a saved .slice project">
+      Open Project…
+      <input id="openProject" type="file" accept=".slice,application/json" hidden />
+    </label>
+    <button id="saveProject" class="btn" disabled title="Save this project (slices + names + image) to a .slice file">Save Project</button>
+    <button id="autodetect" class="btn" disabled>Auto-Slice</button>
+    <button id="scaleBtn" class="btn" disabled title="Scale the template + grid + layers by a factor (e.g. ×2 to go from a 1x comp to 2x art)">Scale</button>
+    <span class="sep"></span>
+    <label class="slider" title="Row-detection threshold. Left = fewer slices, right = more.">
+      Slices <span class="cap">fewer</span>
+      <input id="threshold" type="range" min="6" max="80" value="28" />
+      <span class="cap">more</span>
+    </label>
+    <span class="grow"></span>
+    <span id="stats" class="hint"></span>
+    <button id="export" class="btn primary" disabled title="Save slices to a folder. Shift-click to choose a different folder.">Export Slices</button>
+    <button id="settingsBtn" class="btn settings" title="Email config templates">⚙ Settings</button>
+    <a class="btn kofi" href="https://ko-fi.com/cocodev" target="_blank" rel="noopener noreferrer">☕ Ko-fi</a>
+  </header>
+
+  <nav id="tabs" class="tabs" hidden></nav>
+
+  <main>
+    <aside id="layers" class="layers-panel" hidden>
+      <h3>Layers</h3>
+      <div id="layerList"></div>
+      <label class="btn small addlayer" title="Add a version layer (or drag an image onto the canvas)">
+        + Add version
+        <input id="addLayer" type="file" accept="image/png,image/jpeg" hidden disabled />
+      </label>
+      <button id="diffToggle" class="btn small" disabled title="Highlight pixels that changed vs the version below (magenta)">Diff vs below</button>
+      <button id="magnetToggle" class="btn small" disabled title="After Ctrl-dragging a layer, nudge it to the best pixel match against the layer below">🧲 Auto-align</button>
+      <p class="layhint">Layers lie at native size — never stretched. Active layer is exported; Ctrl-drag it on the canvas to move (snaps to slice guides). Use the sliders for opacity when aligning.</p>
+    </aside>
+    <section id="stage" class="stage">
+      <div id="empty" class="empty">Drop an image here, or click <em>New</em>.</div>
+      <canvas id="canvas" hidden></canvas>
+    </section>
+    <aside id="panel" class="panel" hidden>
+      <div id="spinner" class="spinner"><div class="sp"></div><span id="spinnerMsg">Working…</span></div>
+      <div class="panelhead">
+        <h3>Slices</h3>
+        <span class="grow"></span>
+        <button id="autoAlt" class="btn small" title="Transcribe every slice to alt text">Auto Alt</button>
+      </div>
+      <div id="aiConfig" class="aicfg">
+        <input type="hidden" id="aiProvider" value="openai" />
+        <div class="aitabs">
+          <button type="button" class="aitab active" data-mode="local" data-prov="openai">Local</button>
+          <button type="button" class="aitab" data-mode="openai" data-prov="openai">OpenAI</button>
+          <button type="button" class="aitab" data-mode="anthropic" data-prov="anthropic">Claude</button>
+          <button type="button" class="aitab" data-mode="google" data-prov="google">Google Vision</button>
+          <button type="button" class="aitab" data-mode="tesseract" data-prov="tesseract">Tesseract</button>
+        </div>
+        <div class="airow" id="aiEndpointRow">
+          <input id="aiBase" type="text" placeholder="endpoint" />
+          <input id="aiKey" type="password" placeholder="API key" autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" />
+        </div>
+        <div class="airow" id="aiModelRow">
+          <button id="aiConnect" class="btn small">Connect</button>
+          <select id="aiModel"><option value="">— connect for models —</option></select>
+          <input id="aiMaxTokens" type="number" min="256" step="256" title="Max output tokens (raise for thinking models)" placeholder="tokens" />
+        </div>
+        <p id="aiHint" class="cfghint"></p>
+        <details class="aiprompt">
+          <summary>Alt-text instructions</summary>
+          <textarea id="aiPrompt" spellcheck="false" rows="6"></textarea>
+        </details>
+      </div>
+      <details id="emailPanel" class="email">
+        <summary>Email build</summary>
+        <input id="emSubject" type="text" placeholder="Subject line" autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" data-form-type="other" />
+        <input id="emPreview" type="text" placeholder="Preview text" autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" />
+        <input id="emPreheader" type="text" placeholder="Preheader (defaults to preview)" autocomplete="off" data-bwignore data-1p-ignore data-lpignore="true" />
+        <div class="airow">
+          <select id="emConfig" title="Template config"></select>
+        </div>
+        <div class="airow">
+          <button id="copyHtml" class="btn small primary">Copy HTML</button>
+          <button id="viewHtml" class="btn small">View HTML</button>
+        </div>
+      </details>
+      <ol id="rowList"></ol>
+      <div id="exportResult"></div>
+    </aside>
+  </main>
+
+  <div id="scaleModal" class="modal" hidden>
+    <div class="modalbox scalebox">
+      <div class="modalhead"><strong>Scale Layers</strong><span class="grow"></span><button id="scaleClose" class="btn small">✕ Close</button></div>
+      <p class="cfghint">Resizes the grid, canvas, and every layer's placement together.</p>
+      <div class="scalerow">
+        <input id="scaleSlider" type="range" min="0.25" max="3" step="0.25" value="2" />
+        <span id="scaleValue" class="scaleval">2.00×</span>
+      </div>
+      <div class="scalepresets">
+        <button type="button" class="btn small" data-scale="0.5">0.5×</button>
+        <button type="button" class="btn small" data-scale="2">2×</button>
+        <button type="button" class="btn small" data-scale="3">3×</button>
+      </div>
+      <div class="scaleactions">
+        <button id="scaleCancel" class="btn small">Cancel</button>
+        <button id="scaleApply" class="btn small primary">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="viewModal" class="modal" hidden>
+    <div class="modalbox">
+      <div class="modalhead"><strong>Generated HTML</strong><span class="grow"></span><button id="viewClose" class="btn small">✕ Close</button></div>
+      <div id="viewWarn" class="warn"></div>
+      <div id="viewArea" class="acebox"></div>
+    </div>
+  </div>
+
+  <div id="settingsModal" class="modal" hidden>
+    <div class="modalbox wide">
+      <div class="modalhead">
+        <strong>Email config templates</strong>
+        <span class="grow"></span>
+        <button id="cfgImport" class="btn small">Import…</button>
+        <button id="cfgExport" class="btn small">Export</button>
+        <button id="settingsClose" class="btn small">✕ Close</button>
+        <input id="cfgImportFile" type="file" accept=".json,application/json" hidden />
+      </div>
+      <div class="cfgbody">
+        <div class="cfglist">
+          <select id="cfgSelect" size="8"></select>
+          <div class="airow">
+            <button id="cfgNew" class="btn small">New</button>
+            <button id="cfgDelete" class="btn small">Delete</button>
+          </div>
+        </div>
+        <div class="cfgfields">
+          <div class="cfgrow2">
+            <label>Config name <input id="cfgName" type="text" /></label>
+            <label>Company name <input id="cfgCompany" type="text" placeholder="Example Inc." /></label>
+          </div>
+          <div class="cfgrow2">
+            <label>HTML Template width (px) <input id="cfgWidth" type="number" min="200" step="10" placeholder="600" /></label>
+            <label>Image base URL <input id="cfgBase" type="text" placeholder="https://cdn.example.com/email123/" /></label>
+          </div>
+          <label>Auto-append link params <input id="cfgParams" type="text" placeholder="utm_source=email&utm_campaign=x" /></label>
+          <label>Header HTML (live text, above the sliced rows) <div id="cfgHeader" class="acebox"></div></label>
+          <label>Footer HTML (live text, below the sliced rows) <div id="cfgFooter" class="acebox"></div></label>
+          <p class="cfghint">Shell &amp; cell markup are fixed (table-based, one table per row). Slices are scaled from their 2x size to the template width automatically.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="statusbar">
+    <span id="help">Click = row line · Shift-click = column · Shift double-click = 2 cols (33/66) · Shift triple-click = 3 cols (25/50/75) · drag a guide to move · Ctrl-drag = move layer · Shift-drag = multi-select · drag into a gutter to delete</span>
+    <span class="grow"></span>
+    <span id="status" class="status"></span>
+  </footer>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

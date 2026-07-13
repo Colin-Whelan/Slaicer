@@ -1,0 +1,18 @@
+{
+  "threshold": 28,
+  "minContent": 0.03,
+  "minGutter": 10,
+  "minimumRowHeight": 64,
+  "ignoreTop": 0,
+  "ignoreBottom": 0,
+
+  "colThreshold": 55,
+  "colMinContent": 0.04,
+  "colMinGutter": 38,
+  "minimumColumnWidth": 180,
+
+  "mergeSmallRows": true,
+  "detectColumns": false,
+  "snapColumns": true,
+  "snapTolerance": 0.04
+}
